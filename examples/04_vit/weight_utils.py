@@ -27,12 +27,13 @@ from timm.models.vision_transformer import (
 )
 
 
-def convert_vit(model_name, pretrained=False):
+def convert_vit(model_name, pretrained=False, class_token=False):
     img_size = 224
     embed_dim = 768
     patch_size = 16
     depth = 12
     mod = None
+    global_pool = "token" if class_token else "avg"
     if model_name == "vit_base_patch16_224":
         if pretrained:
             mod = vit_base_patch16_224(pretrained=pretrained).cuda().half()
@@ -42,8 +43,8 @@ def convert_vit(model_name, pretrained=False):
                     img_size=img_size,
                     act_layer=nn.GELU,
                     norm_layer=nn.LayerNorm,
-                    class_token=False,
-                    global_pool="avg",
+                    class_token=class_token,
+                    global_pool=global_pool,
                     depth=depth,
                     patch_size=patch_size,
                     num_heads=12,
@@ -94,8 +95,8 @@ def convert_vit(model_name, pretrained=False):
     return params_ait
 
 
-def export_to_torch_tensor(model_name, pretrained=False):
-    params_ait = convert_vit(model_name, pretrained)
+def export_to_torch_tensor(model_name, pretrained=False, class_token=False):
+    params_ait = convert_vit(model_name, pretrained, class_token=class_token)
     return params_ait
 
 

@@ -93,7 +93,7 @@ def compile_vit(
     return exe_module
 
 
-def benchmark(model_name, batch_size, mod=None, graph_mode=True):
+def benchmark(model_name, batch_size, mod=None, graph_mode=True, class_token=False):
     # load mod
     if model_name == "vit_base_patch16_224":
         img_size = 224
@@ -110,14 +110,15 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
     else:
         raise NotImplementedError
 
-    seqlen = (img_size // patch_size) ** 2
+    seqlen = (img_size // patch_size) ** 2 + (1 if class_token else 0)
 
     if mod is None:
         model_dir = f"vision_transformer_bs{batch_size}_seq{seqlen}"
         mod = Model(os.path.join("./tmp", model_dir, "test.so"))
 
     # prepare params
-    params_ait = export_to_torch_tensor(model_name)
+    params_ait = export_to_torch_tensor(model_name, class_token=class_token)
+    params_ait["cls_token_mask"] = torch.zeros((batch_size, 1, embed_dim)).cuda().half()
     if detect_target().name() == "cuda":
         ait_key = "attn_cu_length"
         for i in range(depth):
@@ -169,17 +170,19 @@ def benchmark(model_name, batch_size, mod=None, graph_mode=True):
 )
 @click.option("--use-graph", type=bool, default=True, help="Whether to use CUDA graph")
 @click.option("--batch-size", type=int, default=0, help="Batch size")
+@click.option("--class-token", type=str, default=False, help="class-token")
 def main(
-    model_name="vit_base_patch16_224", use_fp16_acc=True, use_graph=True, batch_size=0
+    model_name="vit_base_patch16_224", use_fp16_acc=True, use_graph=True, batch_size=0, mod_path=None, class_token=False
 ):
+    global_pool = "token" if class_token else "avg"
     if detect_target().name() == "rocm":
         use_graph = False
     if batch_size < 1:
         for bs in (1, 2, 4, 8, 16, 32, 64, 128, 256):
-            compile_vit(model_name, bs, use_fp16_acc=use_fp16_acc)
-            benchmark(model_name, bs, graph_mode=use_graph)
+            compile_vit(model_name, bs, use_fp16_acc=use_fp16_acc, class_token=class_token, global_pool=global_pool)
+            benchmark(model_name, bs, graph_mode=use_graph, class_token=class_token)
     else:
-        benchmark(model_name, batch_size, graph_mode=use_graph)
+        benchmark(model_name, batch_size, graph_mode=use_graph, class_token=class_token)
 
 
 if __name__ == "__main__":
